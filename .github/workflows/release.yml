@@ -3,7 +3,16 @@ name: Release Plugin
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'  # 当推送 v1.0.0 这样的 tag 时触发
+      - 'v*.*.*'  # 当推送 v1.0.0 这样的 tag 时触发
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.4 or v1.0.4)'
+        required: true
+      jadx_version:
+        description: 'JADX version to download (default 1.5.5)'
+        required: false
+        default: '1.5.5'
 
 permissions:
   contents: write
@@ -23,46 +32,40 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Get version from tag
+    - name: Get version
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION_INPUT="${{ github.event.inputs.version }}"
+          VERSION="${VERSION_INPUT#v}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/v}"
+        fi
+        echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Resolved VERSION=$VERSION"
+
+    - name: Resolve JADX version
+      id: get_jadx_version
+      shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.jadx_version }}" ]]; then
+          JADX_VERSION="${{ github.event.inputs.jadx_version }}"
+        else
+          JADX_VERSION="1.5.5"
+        fi
+        echo "JADX_VERSION=$JADX_VERSION" >> "$GITHUB_OUTPUT"
+        echo "Resolved JADX_VERSION=$JADX_VERSION"
     
-    - name: Download Latest JADX GUI JAR
+    - name: Download JADX GUI JAR
+      shell: bash
       run: |
         mkdir -p lib
-        # Get release info from LunFengChen/jadx
-        RELEASE_JSON=$(curl -s https://api.github.com/repos/LunFengChen/jadx/releases/latest)
-        JADX_TAG=$(echo "$RELEASE_JSON" | jq -r .tag_name)
-        echo "Latest JADX version: $JADX_TAG"
-        
-        # Find a zip asset (e.g. jadx-gui-*-win.zip or jadx-*.zip)
-        DOWNLOAD_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' | head -n 1)
-        
-        if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
-          echo "Error: No zip file found in release assets."
-          exit 1
-        fi
-
-        echo "Downloading from: $DOWNLOAD_URL"
-        wget -O jadx_dist.zip "$DOWNLOAD_URL"
-        
-        # Unzip and find jar
-        unzip -q jadx_dist.zip -d jadx_temp
-        
-        # Find the main jar (e.g., jadx-dev-all.jar or jadx-gui-*.jar) inside the extracted folder (likely in lib/)
-        JAR_FILE=$(find jadx_temp -name "*.jar" | grep -v "sources" | grep -v "javadoc" | head -n 1)
-        
-        if [ -z "$JAR_FILE" ]; then
-            echo "Error: No JAR file found in the zip."
-            exit 1
-        fi
-        
-        echo "Found JAR: $JAR_FILE"
-        mv "$JAR_FILE" lib/jadx-gui.jar
-        
-        # Cleanup
-        rm jadx_dist.zip
-        rm -rf jadx_temp
+        JADX_VERSION="${{ steps.get_jadx_version.outputs.JADX_VERSION }}"
+        DOWNLOAD_URL="https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-gui-${JADX_VERSION}-all.jar"
+        echo "Downloading JADX from: $DOWNLOAD_URL"
+        curl -fL "$DOWNLOAD_URL" -o lib/jadx-gui.jar
+        ls -lh lib/jadx-gui.jar
     
     - name: Update version in pom.xml
       run: |
