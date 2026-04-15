@@ -128,11 +128,8 @@ public class FridaScriptDialog extends JDialog {
             logger.warn("Failed to apply theme to RSyntaxTextArea", e);
         }
 
-        // Set font from JADX settings
-        Font font = settings.getFont();
-        if (font == null) {
-            font = new Font("Consolas", Font.PLAIN, 13);
-        }
+        // Resolve font from JADX settings in a version-compatible way.
+        Font font = resolveEditorFont();
         
         // Check if JADX font supports Chinese, if not, fallback to a font that does
         if (!isChineseSupported(font)) {
@@ -209,6 +206,41 @@ public class FridaScriptDialog extends JDialog {
 
     private boolean isChineseSupported(Font font) {
         return font.canDisplay('中');
+    }
+
+    /**
+     * Resolve editor font from JADX settings using reflection to avoid runtime
+     * NoSuchMethodError across different JADX versions.
+     */
+    private Font resolveEditorFont() {
+        Font fallback = new Font("Consolas", Font.PLAIN, 13);
+        if (settings == null) {
+            return fallback;
+        }
+        try {
+            // JADX 1.5.x variants may expose different font-related accessors.
+            String[] methods = new String[] {"getFont", "getFontStr", "getSmaliFont", "getCodeFont"};
+            for (String methodName : methods) {
+                try {
+                    Method method = settings.getClass().getMethod(methodName);
+                    Object value = method.invoke(settings);
+                    if (value instanceof Font) {
+                        return (Font) value;
+                    }
+                    if (value instanceof String) {
+                        Font decoded = Font.decode((String) value);
+                        if (decoded != null) {
+                            return decoded;
+                        }
+                    }
+                } catch (NoSuchMethodException ignore) {
+                    // Try next candidate method name.
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to resolve editor font from JADX settings", e);
+        }
+        return fallback;
     }
 
     /**

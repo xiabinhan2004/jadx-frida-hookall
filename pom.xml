@@ -12,16 +12,18 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jadx.gui.version>1.5.5</jadx.gui.version>
+        <jadx.gui.jar>${project.basedir}/lib/jadx-gui.jar</jadx.gui.jar>
     </properties>
 
     <dependencies>
-        <!-- JADX GUI 1.5.3 - 排除所有传递依赖 -->
+        <!-- JADX GUI (systemPath is configurable via -Djadx.gui.jar=...) -->
         <dependency>
             <groupId>io.github.skylot</groupId>
             <artifactId>jadx-gui</artifactId>
-            <version>1.5.3</version>
+            <version>${jadx.gui.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/lib/jadx-gui.jar</systemPath>
+            <systemPath>${jadx.gui.jar}</systemPath>
         </dependency>
 
         <!-- Logging -->
